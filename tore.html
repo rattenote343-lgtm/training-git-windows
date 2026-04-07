@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>筋トレ記録＆分析アプリ</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+      margin: 20px;
+      color: #333;
+      background-color: #f4f7f6;
+    }
+    h1, h2 { color: #2c3e50; }
+    nav { margin-bottom: 20px; display: flex; gap: 10px; }
+    nav button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      background-color: #3498db;
+      color: white;
+      border-radius: 5px;
+      transition: background 0.3s;
+    }
+    nav button:hover { background-color: #2980b9; }
+    nav button.active-nav { background-color: #2c3e50; }
+    
+    .page { display: none; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .page.active { display: block; }
+    
+    .form-container { margin-bottom: 30px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #fafafa; }
+    .form-group { display: inline-block; margin-right: 15px; margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+    .form-group input, .form-group select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    
+    .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; color: white; }
+    .btn-submit { background-color: #27ae60; }
+    .btn-submit:hover { background-color: #2ecc71; }
+    .btn-cancel { background-color: #95a5a6; }
+    .btn-edit { background-color: #f39c12; margin-right: 5px; }
+    .btn-delete { background-color: #c0392b; }
+    
+    .filters { margin-bottom: 15px; padding: 10px; background: #ecf0f1; border-radius: 5px; }
+    .filters select { padding: 5px; margin-right: 15px; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 10px; border: 1px solid #ddd; text-align: center; }
+    th { background-color: #ecf0f1; }
+    
+    .pagination { margin-top: 20px; display: flex; align-items: center; gap: 10px; }
+    .pagination button { padding: 5px 10px; cursor: pointer; }
+    .pagination input { width: 60px; padding: 5px; }
+
+    #frequencyInfo { margin: 15px 0; font-size: 16px; font-weight: bold; color: #2980b9; }
+    .chart-container { max-width: 800px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+  <h1>筋トレ記録アプリ</h1>
+  <nav>
+    <button id="navPage1" class="active-nav" onclick="switchPage('page1', this)">記録・履歴</button>
+    <button id="navPage2" onclick="switchPage('page2', this)">データ分析</button>
+  </nav>
+
+  <!-- 1ページ目：トレーニング記録と履歴 -->
+  <div id="page1" class="page active">
+    
+    <!-- 入力フォーム -->
+    <div class="form-container">
+      <h2>トレーニングデータ入力</h2>
+      <form id="recordForm">
+        <input type="hidden" id="editId">
+        
+        <div class="form-group">
+          <label for="dateInput">日付</label>
+          <input type="date" id="dateInput" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="categorySelect">部位</label>
+          <select id="categorySelect" required>
+            <option value="">選択してください</option>
+            <option value="胸">胸</option>
+            <option value="背中">背中</option>
+            <option value="脚">脚</option>
+            <option value="肩">肩</option>
+            <option value="腕">腕</option>
+            <option value="腹">腹</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="exerciseSelect">種目</label>
+          <select id="exerciseSelect" required>
+            <option value="">先に部位を選択してください</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="weightInput">重量 (kg)</label>
+          <input type="number" id="weightInput" step="1" min="0" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="repsInput">回数</label>
+          <input type="number" id="repsInput" min="1" required>
+        </div>
+        
+        <div class="form-group" style="vertical-align: bottom;">
+          <button type="submit" id="submitBtn" class="btn btn-submit">追加する</button>
+          <button type="button" id="cancelBtn" class="btn btn-cancel" style="display:none;">キャンセル</button>
+          <div id="formMessage" style="color: #27ae60; font-weight: bold; margin-top: 10px; height: 20px;"></div>
+        </div>
+      </form>
+    </div>
+
+    <!-- 履歴表示 -->
+    <div>
+      <h2>トレーニング履歴</h2>
+      <div class="filters">
+        <label>日付で絞り込み: </label>
+        <select id="filterDate"><option value="">すべて</option></select>
+        
+        <label>種目で絞り込み: </label>
+        <select id="filterExercise"><option value="">すべて</option></select>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>日付</th>
+            <th>部位</th>
+            <th>種目</th>
+            <th>重量 (kg)</th>
+            <th>回数</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="historyTableBody">
+          <!-- 履歴がここに追加されます -->
+        </tbody>
+      </table>
+
+      <!-- ページネーション -->
+      <div class="pagination">
+        <button id="prevPageBtn">前ページ</button>
+        <span id="pageInfo">1 / 1 ページ</span>
+        <button id="nextPageBtn">次ページ</button>
+        
+        <label style="margin-left:20px;">ページ指定: 
+          <input type="number" id="jumpPageInput" min="1">
+        </label>
+        <button id="jumpPageBtn" class="btn btn-submit">ジャンプ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2ページ目：データ分析 -->
+  <div id="page2" class="page">
+    <h2>トレーニングデータ分析</h2>
+    
+    <div class="filters">
+      <label for="analyzeExerciseSelect">分析する種目: </label>
+      <select id="analyzeExerciseSelect">
+        <option value="">種目を選択してください</option>
+      </select>
+    </div>
+    
+    <div id="frequencyInfo"></div>
+    
+     <!-- ★この1行を追加する（回数情報を表示する枠） -->
+    <div id="repsInfo" style="margin-bottom: 20px; font-size: 15px; color: #333;"></div>
+
+    <div class="chart-container">
+      <canvas id="weightChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    // --- 1. 初期設定とデータ ---
+    const exercisesByCategory = {
+      "胸":["ベンチプレス", "ダンベルプレス", "ペックフライ", "インクラインプレス", "バタフライ","ディップス"],
+      "背中":["デッドリフト", "ラットプルダウン", "ベントオーバーロウ", "懸垂", "ローロウ","リアデルト"],
+      "脚":["バーベルスクワット", "レッグプレス", "レッグエクステンション", "レッグカール", "スミススクワット"],
+      "肩":["ショルダープレス", "サイドレイズ", "フロントレイズ", "リアレイズ", "アップライトロウ"],
+      "腕":["アームカール", "ハンマーカール", "ケーブルプレスダウン","ケーブルフェイスプル","フレンチプレス"],
+      "腹":["クランチ", "レッグレイズ", "アブローラー", "ケーブルクランチ"]
+    };
+
+    let records =[];
+    let currentPage = 1;
+    const itemsPerPage = 30; // 1ページあたり30件
+    let chartInstance = null;
+
+    // 起動時の処理
+    window.onload = () => {
+      // 日付の初期値を今日にする
+      document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+      // ローカルストレージからデータを読み込む
+      const savedData = localStorage.getItem('workout_records');
+      if(savedData) {
+        records = JSON.parse(savedData);
+      }
+      updateFilters();
+      renderHistory();
+    };
+
+
+    // --- 2. ページ切り替え機能 ---
+    function switchPage(pageId, btnElement) {
+      document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+      document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active-nav'));
+      
+      document.getElementById(pageId).classList.add('active');
+      btnElement.classList.add('active-nav');
+
+      if (pageId === 'page2') {
+        updateAnalyzeOptions();
+        drawChart();
+      }
+    }
+
+
+    // --- 3. 入力フォームの連動（部位 -> 種目） ---
+    document.getElementById('categorySelect').addEventListener('change', function() {
+      populateExercises(this.value, document.getElementById('exerciseSelect'));
+    });
+
+    function populateExercises(category, selectElement, selectedValue = '') {
+      selectElement.innerHTML = '<option value="">選択してください</option>';
+      if (category && exercisesByCategory[category]) {
+        exercisesByCategory[category].forEach(ex => {
+          const opt = document.createElement('option');
+          opt.value = ex;
+          opt.textContent = ex;
+          if (ex === selectedValue) opt.selected = true;
+          selectElement.appendChild(opt);
+        });
+      }
+    }
+
+
+    // --- 4. データの追加と更新 (CRUD) ---
+    document.getElementById('recordForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const idStr = document.getElementById('editId').value;
+      const record = {
+        id: idStr ? parseInt(idStr) : Date.now(),
+        date: document.getElementById('dateInput').value,
+        category: document.getElementById('categorySelect').value,
+        exercise: document.getElementById('exerciseSelect').value,
+        weight: parseFloat(document.getElementById('weightInput').value),
+        reps: parseInt(document.getElementById('repsInput').value)
+      };
+
+      if (idStr) {
+        // 更新
+        const index = records.findIndex(r => r.id === record.id);
+        if(index !== -1) records[index] = record;
+        resetForm();
+      } else {
+        // 追加
+        records.push(record);
+      }
+
+      saveData();
+      updateFilters();
+      renderHistory();
+
+      const msgDiv = document.getElementById('formMessage');
+      // 編集か新規追加かでメッセージを切り替える
+      msgDiv.textContent = idStr ? '更新しました！' : '追加しました！';
+      
+      // 0.5秒(500ミリ秒)後にメッセージを消す
+      setTimeout(() => {
+        msgDiv.textContent = '';
+      }, 500); 
+    });
+
+    function saveData() {
+      localStorage.setItem('workout_records', JSON.stringify(records));
+    }
+
+
+    // --- 5. 履歴の表示・フィルター・ページネーション ---
+    function updateFilters() {
+      const dateSelect = document.getElementById('filterDate');
+      const exSelect = document.getElementById('filterExercise');
+      const currentValD = dateSelect.value;
+      const currentValE = exSelect.value;
+
+      dateSelect.innerHTML = '<option value="">すべて</option>';
+      exSelect.innerHTML = '<option value="">すべて</option>';
+
+      // 重複を除去してソート
+      const uniqueDates = [...new Set(records.map(r => r.date))].sort((a,b) => new Date(b) - new Date(a)); // 降順
+      const uniqueExercises =[...new Set(records.map(r => r.exercise))].sort();
+
+      uniqueDates.forEach(d => dateSelect.appendChild(new Option(d, d)));
+      uniqueExercises.forEach(e => exSelect.appendChild(new Option(e, e)));
+
+      if(uniqueDates.includes(currentValD)) dateSelect.value = currentValD;
+      if(uniqueExercises.includes(currentValE)) exSelect.value = currentValE;
+    }
+
+    document.getElementById('filterDate').addEventListener('change', () => { currentPage = 1; renderHistory(); });
+    document.getElementById('filterExercise').addEventListener('change', () => { currentPage = 1; renderHistory(); });
+
+    function renderHistory() {
+      const filterDate = document.getElementById('filterDate').value;
+      const filterEx = document.getElementById('filterExercise').value;
+
+      // 絞り込みとソート（新しい日付順）
+      let filtered = records.filter(r => {
+        return (filterDate ? r.date === filterDate : true) &&
+               (filterEx ? r.exercise === filterEx : true);
+      });
+      filtered.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+      // ページネーション計算
+      const totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
+      if(currentPage > totalPages) currentPage = totalPages;
+      if(currentPage < 1) currentPage = 1;
+
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const paginatedData = filtered.slice(startIndex, startIndex + itemsPerPage);
+
+      // 描画
+      const tbody = document.getElementById('historyTableBody');
+      tbody.innerHTML = '';
+      paginatedData.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.date}</td>
+          <td>${r.category}</td>
+          <td>${r.exercise}</td>
+          <td>${r.weight}</td>
+          <td>${r.reps}</td>
+          <td>
+            <button class="btn btn-edit" onclick="editRecord(${r.id})">編集</button>
+            <button class="btn btn-delete" onclick="deleteRecord(${r.id})">削除</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // ページネーションUI更新
+      document.getElementById('pageInfo').textContent = `${currentPage} / ${totalPages} ページ`;
+      document.getElementById('prevPageBtn').disabled = (currentPage === 1);
+      document.getElementById('nextPageBtn').disabled = (currentPage === totalPages);
+      document.getElementById('jumpPageInput').max = totalPages;
+    }
+
+    // ページ操作イベント
+    document.getElementById('prevPageBtn').addEventListener('click', () => { currentPage--; renderHistory(); });
+    document.getElementById('nextPageBtn').addEventListener('click', () => { currentPage++; renderHistory(); });
+    document.getElementById('jumpPageBtn').addEventListener('click', () => {
+      const input = document.getElementById('jumpPageInput').value;
+      if(input) {
+        currentPage = parseInt(input);
+        renderHistory();
+      }
+    });
+
+    // --- 6. 編集・削除機能 ---
+    window.editRecord = function(id) {
+      const record = records.find(r => r.id === id);
+      if(!record) return;
+
+      document.getElementById('editId').value = record.id;
+      document.getElementById('dateInput').value = record.date;
+      document.getElementById('categorySelect').value = record.category;
+      
+      populateExercises(record.category, document.getElementById('exerciseSelect'), record.exercise);
+      
+      document.getElementById('weightInput').value = record.weight;
+      document.getElementById('repsInput').value = record.reps;
+
+      document.getElementById('submitBtn').textContent = "更新する";
+      document.getElementById('cancelBtn').style.display = "inline-block";
+      
+      // 画面上部にスクロール
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    window.deleteRecord = function(id) {
+      if(confirm("本当に削除しますか？")) {
+        records = records.filter(r => r.id !== id);
+        saveData();
+        updateFilters();
+        renderHistory();
+      }
+    };
+
+    document.getElementById('cancelBtn').addEventListener('click', resetForm);
+
+    function resetForm() {
+      document.getElementById('editId').value = '';
+      document.getElementById('recordForm').reset();
+      document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+      document.getElementById('exerciseSelect').innerHTML = '<option value="">先に部位を選択してください</option>';
+      document.getElementById('submitBtn').textContent = "追加する";
+      document.getElementById('cancelBtn').style.display = "none";
+    }
+
+
+    // --- 7. データ分析・グラフ表示 ---
+    function updateAnalyzeOptions() {
+      const select = document.getElementById('analyzeExerciseSelect');
+      const currentVal = select.value;
+      select.innerHTML = '<option value="">種目を選択してください</option>';
+      
+      const uniqueExercises =[...new Set(records.map(r => r.exercise))].sort();
+      uniqueExercises.forEach(e => {
+        select.appendChild(new Option(e, e));
+      });
+      if(uniqueExercises.includes(currentVal)) select.value = currentVal;
+    }
+
+    document.getElementById('analyzeExerciseSelect').addEventListener('change', drawChart);
+
+    function drawChart() {
+      const exercise = document.getElementById('analyzeExerciseSelect').value;
+      const ctx = document.getElementById('weightChart').getContext('2d');
+      const freqInfo = document.getElementById('frequencyInfo');
+      const repsInfo = document.getElementById('repsInfo'); // ★この行を追加
+
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+
+      if (!exercise) {
+        freqInfo.textContent = '';
+        repsInfo.innerHTML = ''; // ★この行を追加（種目が空の時は回数表示も消す）
+        return;
+      }
+
+      // 対象種目のデータを日付順（古い順）にソート
+      const exRecords = records.filter(r => r.exercise === exercise)
+                               .sort((a,b) => new Date(a.date) - new Date(b.date));
+      
+      if (exRecords.length === 0) return;
+
+      // 日付ごとに最大重量を算出（同日に複数回やった場合、一番重いものを採用）
+      const weightPerDate = {};
+      exRecords.forEach(r => {
+        if (!weightPerDate[r.date] || weightPerDate[r.date] < r.weight) {
+          weightPerDate[r.date] = r.weight;
+        }
+      });
+
+      const labels = Object.keys(weightPerDate).sort((a,b) => new Date(a) - new Date(b));
+      const data = labels.map(date => weightPerDate[date]);
+
+      // 頻度の計算
+      const daysCount = labels.length;
+      let freqText = `【${exercise}】の実施日数: ${daysCount}日`;
+      
+      if (daysCount > 1) {
+        const firstDate = new Date(labels[0]);
+        const lastDate = new Date(labels[labels.length - 1]);
+        const diffTime = Math.abs(lastDate - firstDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        const perWeek = ((daysCount / diffDays) * 7).toFixed(1);
+        freqText += ` （平均頻度: 週 ${perWeek} 回）`;
+      }
+      freqInfo.textContent = freqText;
+
+      // ★ここから追記：総回数と月ごとの総回数の計算
+      
+      // 1. 総回数の計算 (すべてのrepsを足し合わせる)
+      const totalReps = exRecords.reduce((sum, record) => sum + record.reps, 0);
+      
+      // 2. 月ごとの総回数を計算
+      const monthlyReps = {};
+      exRecords.forEach(r => {
+        // 日付 "YYYY-MM-DD" から "YYYY-MM" (年-月) だけを切り出す
+        const month = r.date.substring(0, 7); 
+        if (!monthlyReps[month]) {
+          monthlyReps[month] = 0;
+        }
+        monthlyReps[month] += r.reps;
+      });
+
+      // 3. 表示用のHTMLを作成
+      let repsHtml = `<p style="margin-top: 10px; margin-bottom: 5px;"><strong>【${exercise}】の総回数:</strong> ${totalReps} 回</p>`;
+      
+      if (Object.keys(monthlyReps).length > 0) {
+        repsHtml += `<p style="margin-top: 5px; margin-bottom: 0;"><strong>月ごとの総回数:</strong></p><ul style="margin-top: 5px; padding-left: 20px;">`;
+        
+        // 月が古い順に並ぶようにソートしてリスト化
+        const sortedMonths = Object.keys(monthlyReps).sort();
+        sortedMonths.forEach(month => {
+          const [yyyy, mm] = month.split('-'); // "2026-03" を "2026" と "03" に分ける
+          repsHtml += `<li>${yyyy}年${mm}月: <strong>${monthlyReps[month]} 回</strong></li>`;
+        });
+        repsHtml += `</ul>`;
+      }
+      
+      // 画面に反映
+      repsInfo.innerHTML = repsHtml;
+      
+      // ==========================================
+      // ★ここまで追記
+
+      // グラフ描画
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets:[{
+            label: `${exercise} の最大重量 (kg) の推移`,
+            data: data,
+            borderColor: '#e74c3c',
+            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.1,
+            pointBackgroundColor: '#c0392b',
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: false,
+              title: { display: true, text: '重量 (kg)' }
+            },
+            x: {
+              title: { display: true, text: '日付' }
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
